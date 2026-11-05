@@ -12,6 +12,13 @@ export const MODELS = [
     label: "Gemini 3 Flash (newer, thinks out loud less often)",
     googleId: "gemini-3-flash-preview",
   },
+  {
+    // Gemini 3 Flash's free tier allows only 20 requests a day per project, which
+    // a class can use up in minutes. Flash-Lite has its own, larger allowance.
+    id: "google/gemini-3.1-flash-lite",
+    label: "Gemini 3.1 Flash-Lite (fast, much higher free limits)",
+    googleId: "gemini-3.1-flash-lite",
+  },
 ] as const;
 
 export type ModelId = (typeof MODELS)[number]["id"];
