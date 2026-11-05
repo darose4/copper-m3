@@ -94,6 +94,8 @@ passage (and page) an answer came from.
 | Splitting | `lib/copper/passage-split.ts` | Drops each page's repeated header, groups sentences three to a passage, starts each passage's text with the document title, and scales embeddings to length 1 |
 | Loader | `lib/copper/passages.ts` | Importing it loads the whole JSON file into memory once, when the app starts: `passages` (title, page, text, embedding) |
 | Search tool | `lib/copper/assistant/tools.ts` (`search_documents`) | Ask Copper's fifth tool. Embeds the shopper's question as a "query", ranks every passage by how close its embedding is (a dot product, since all have length 1), and returns the top four with their document title, page and a link to that page of the PDF. Copper's instructions tell it to answer only from those passages and to cite the title and page |
+| Answer check | `scripts/eval-questions.ts` (`npm run eval`) | Asks Copper 14 fixed questions, each in a fresh conversation, with real model calls: lookups, product mix-up traps, and things the documents don't cover. Checks each reply for the right facts, the right page cited and no guessing, then prints PASS or FAIL per question and exits with an error if any fail. Run it after changing the passages, the instructions or the search |
+| Sources | `lib/copper/assistant/sources.ts` | Works out which document pages a reply cites, so the chat shows a Sources list with only those pages, each linking to the PDF page |
 | Embedding call | `lib/ai/call.ts` (`callEmbed`) | Embeds texts as "document" (stored) or "query" (a question), logged to `ai_calls` like every other call. Model and size: `EMBEDDING_MODEL` in `lib/ai/models.ts` (`gemini-embedding-001`, 768 numbers) |
 
 ## Module 3 starter: Ask Copper

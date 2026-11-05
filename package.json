@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "start-module": "node scripts/start-module.mjs",
     "env:check": "node scripts/check-env.mjs",
-    "passages:build": "tsx --env-file=.env.local scripts/build-passages.ts"
+    "passages:build": "tsx --env-file=.env.local scripts/build-passages.ts",
+    "eval": "tsx --env-file=.env.local scripts/eval-questions.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.93",
