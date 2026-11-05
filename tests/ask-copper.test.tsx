@@ -406,6 +406,22 @@ describe("Part A: the Ask Copper chat widget", () => {
     ).toBeInTheDocument();
     expect(inCard.getByText("Page 2")).toBeInTheDocument();
     expect(inCard.getByText(/factory reset erases/i)).toBeInTheDocument();
+
+    // Under the reply, a Sources list names only the page the reply cited
+    // (not the FAQ page that was searched but unused), linked to that PDF page.
+    const sources = section.querySelector<HTMLElement>(
+      '[data-testid="sources"]',
+    );
+    expect(sources).not.toBeNull();
+    const inSources = within(sources!);
+    expect(
+      inSources.getByRole("link", { name: /Copper Home User Guide · page 9/ }),
+    ).toHaveAttribute("href", "/docs/copper-home-user-guide.pdf#page=9");
+    expect(inSources.queryByText(/Copper Plus FAQ/)).toBeNull();
+    expect(
+      chat.getByText(/hold both buttons/i).compareDocumentPosition(sources!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("AC-M2.4 Each tool call shows as an open card before the reply: the tool, what Copper sent and what came back", async () => {
@@ -449,6 +465,8 @@ describe("Part A: the Ask Copper chat widget", () => {
     expect(card.getByText(/what came back/i)).toBeVisible();
     expect(card.getByText(/Copper Plus, annual, 2 years/)).toBeVisible();
     expect(cards[0].textContent).toContain("$307");
+    // No document was searched, so there are no sources to list.
+    expect(section.querySelector('[data-testid="sources"]')).toBeNull();
     // The card comes before Copper's reply: the tool ran first.
     const reply = chat.getByText(/comes to \$307/);
     expect(

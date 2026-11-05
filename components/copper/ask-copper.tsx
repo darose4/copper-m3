@@ -9,6 +9,7 @@ import {
   ArrowRightIcon,
   ArrowUpIcon,
   BrainIcon,
+  FileTextIcon,
   MessageCircleIcon,
   TriangleAlertIcon,
   WrenchIcon,
@@ -28,6 +29,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { readLive } from "@/lib/ai/live";
 import { askCopper, type ChatMessage } from "@/lib/copper/assistant/ask";
+import { citedSources } from "@/lib/copper/assistant/sources";
 import {
   type Progress,
   type ToolStep,
@@ -263,6 +265,9 @@ function Answer({
     steps.filter((s): s is ToolStep => s.type === "tool").map((s) => s.name),
   );
   const working = status === "working";
+  // Only a finished answer shows its sources: the reply has to be complete to
+  // say which pages it cites.
+  const sources = working ? [] : citedSources(reply, steps);
   let toolCount = 0;
   return (
     <div className="space-y-3">
@@ -388,6 +393,28 @@ function Answer({
               <span className="bg-primary ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle" />
             )}
           </p>
+          {sources.length > 0 && (
+            <div data-testid="sources" className="mt-3 border-t pt-2">
+              <p className="text-muted-foreground mb-1 text-[11px] font-semibold tracking-widest uppercase">
+                Sources
+              </p>
+              <ul className="space-y-1 text-xs">
+                {sources.map((source) => (
+                  <li key={`${source.title}-${source.page}`}>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                    >
+                      <FileTextIcon className="size-3" />
+                      {source.title} · page {source.page}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
