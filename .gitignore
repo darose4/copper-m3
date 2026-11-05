@@ -43,3 +43,6 @@ next-env.d.ts
 # grading output and caches
 .grading/
 .vitest-cache/
+
+.vercel
+.env*

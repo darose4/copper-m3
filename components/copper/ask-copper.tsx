@@ -605,6 +605,36 @@ function ToolOutput({ name, output }: { name: string; output: any }) {
       </div>
     );
   }
+  if (name === "search_documents" && output?.status) {
+    if (output.status === "unavailable")
+      return <p className="text-xs">{output.message}</p>;
+    return (
+      <div className="space-y-2 text-xs">
+        {output.matches.map((match: any, i: number) => (
+          <div key={i} className="bg-card space-y-1 rounded-lg border p-2">
+            <div className="flex items-center justify-between gap-2">
+              {match.url ? (
+                <a
+                  href={match.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary font-medium underline-offset-2 hover:underline"
+                >
+                  {match.title}
+                </a>
+              ) : (
+                <span className="font-medium">{match.title}</span>
+              )}
+              <Pill className="bg-accent shrink-0 text-white">
+                Page {match.page}
+              </Pill>
+            </div>
+            <p className="text-muted-foreground line-clamp-3">{match.text}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
   // A tool without its own layout yet: show what came back as plain text.
   return (
     <pre className="max-h-48 overflow-auto text-xs whitespace-pre-wrap">

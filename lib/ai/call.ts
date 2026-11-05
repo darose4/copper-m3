@@ -1,8 +1,13 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, Output, streamText } from "ai";
+import { embedMany, generateText, Output, streamText } from "ai";
 import type { z } from "zod";
-import { defaultModel, MODELS, type ModelId } from "@/lib/ai/models";
-import { costUsd } from "@/lib/ai/pricing";
+import {
+  defaultModel,
+  EMBEDDING_MODEL,
+  MODELS,
+  type ModelId,
+} from "@/lib/ai/models";
+import { costUsd, embeddingCostUsd } from "@/lib/ai/pricing";
 
 // Every model call in the app goes through this file, so each one is logged
 // with its tokens, cost and how long it took. The log goes to the terminal
@@ -36,7 +41,7 @@ type TextOptions = DistributiveOmit<
 export type AiCallRow = {
   module: number;
   feature: string;
-  model: ModelId;
+  model: ModelId | typeof EMBEDDING_MODEL.id;
   input_tokens: number | null;
   output_tokens: number | null;
   cost_usd: number | null;
@@ -145,6 +150,54 @@ export function callStream(info: CallInfo, options: StreamOptions) {
     onFinish: ({ totalUsage }) => logCall(row(true, totalUsage)),
     onError: () => logCall(row(false)),
   });
+}
+
+/**
+ * Turns each text into an embedding (a list of numbers that captures its
+ * meaning) and returns them in the same order. Logged to ai_calls like every
+ * other call. Use "document" for text you are storing and "query" for a
+ * question you are searching with: Gemini embeds them slightly differently so
+ * they match each other well.
+ * Example: callEmbed({ module: 3, feature: "embed-passages" }, passages, "document")
+ */
+export async function callEmbed(
+  info: { module: number; feature: string },
+  values: string[],
+  kind: "document" | "query" = "document",
+): Promise<number[][]> {
+  const started = performance.now();
+  const row = (ok: boolean, tokens?: number | null): AiCallRow => ({
+    module: info.module,
+    feature: info.feature,
+    model: EMBEDDING_MODEL.id,
+    input_tokens: tokens ?? null,
+    output_tokens: null,
+    cost_usd:
+      tokens === undefined || tokens === null ? null : embeddingCostUsd(tokens),
+    latency_ms: Math.round(performance.now() - started),
+    ok,
+    created_at: new Date().toISOString(),
+  });
+  try {
+    const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
+    if (!googleKey) throw new AiNotConfiguredError();
+    const google = createGoogleGenerativeAI({ apiKey: googleKey });
+    const { embeddings, usage } = await embedMany({
+      model: google.embedding(EMBEDDING_MODEL.googleId),
+      values,
+      providerOptions: {
+        google: {
+          outputDimensionality: EMBEDDING_MODEL.dimensions,
+          taskType: kind === "query" ? "RETRIEVAL_QUERY" : "RETRIEVAL_DOCUMENT",
+        },
+      },
+    });
+    await logCall(row(true, usage?.tokens));
+    return embeddings;
+  } catch (error) {
+    if (!(error instanceof AiNotConfiguredError)) await logCall(row(false));
+    throw error;
+  }
 }
 
 // Asking for some thinking (rather than letting the model decide) is what

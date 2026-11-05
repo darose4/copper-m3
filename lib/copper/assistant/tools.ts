@@ -1,6 +1,7 @@
-// Module 2: the four tools Ask Copper can use. Products and prices come from
-// lib/copper/catalog.ts and stock from lib/copper/inventory.ts, so the
-// chatbot never has to make them up.
+// The tools Ask Copper can use. Products and prices come from
+// lib/copper/catalog.ts, stock from lib/copper/inventory.ts, and answers about
+// setup, troubleshooting, warranty, privacy and terms from the company's PDFs
+// (lib/copper/passages.ts), so the chatbot never has to make them up.
 // Each tool returns plain data; the model writes the reply around it.
 import { tool } from "ai";
 import { z } from "zod";
@@ -10,7 +11,11 @@ import {
   type Plan,
   type ProductId,
 } from "@/lib/copper/catalog";
+import { callEmbed } from "@/lib/ai/call";
+import { DOCUMENTS } from "@/lib/copper/documents";
 import { readInventory } from "@/lib/copper/inventory";
+import { normalize } from "@/lib/copper/passage-split";
+import { passages } from "@/lib/copper/passages";
 
 export type ProductList = {
   products: {
@@ -177,6 +182,86 @@ export async function checkAvailability(
   };
 }
 
+export type DocumentSearchInput = { question: string };
+
+export type DocumentMatch = {
+  /** The document it came from, e.g. "Copper Home User Guide". */
+  title: string;
+  page: number;
+  /** The passage itself, without the title it starts with in the saved file. */
+  text: string;
+  /** Opens the PDF at that page. */
+  url: string;
+  /** How close the passage is to the question: 1 is identical, near 0 is unrelated. */
+  score: number;
+};
+
+export type DocumentSearch =
+  | { status: "ok"; matches: DocumentMatch[] }
+  | { status: "unavailable"; message: string };
+
+/** How many passages a search brings back. */
+const MATCHES_PER_SEARCH = 4;
+
+export const searchDocumentsInput: z.ZodType<DocumentSearchInput> = z.object({
+  question: z.string().trim().min(3).max(300),
+});
+
+/** Both embeddings have length 1, so this is how alike they are. */
+function similarity(a: number[], b: number[]): number {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += a[i] * b[i];
+  return sum;
+}
+
+/**
+ * search_documents: finds the passages in the user guides, the Copper Plus FAQ
+ * and the Terms and Conditions that are closest in meaning to the question,
+ * and says which document and page each one is on.
+ */
+export async function searchDocuments({
+  question,
+}: DocumentSearchInput): Promise<DocumentSearch> {
+  if (passages.length === 0) {
+    return {
+      status: "unavailable",
+      message:
+        "The documents aren't loaded, so they can't be searched right now.",
+    };
+  }
+  try {
+    const [embedding] = await callEmbed(
+      { module: 3, feature: "search-documents" },
+      [question],
+      "query",
+    );
+    const query = normalize(embedding);
+    const matches = passages
+      .map((passage) => ({
+        passage,
+        score: similarity(query, passage.embedding),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, MATCHES_PER_SEARCH)
+      .map(({ passage, score }): DocumentMatch => {
+        const file = DOCUMENTS.find((d) => d.id === passage.documentId)?.file;
+        return {
+          title: passage.title,
+          page: passage.page,
+          text: passage.text.slice(passage.title.length + 2),
+          url: file ? `${file}#page=${passage.page}` : "",
+          score: Math.round(score * 1000) / 1000,
+        };
+      });
+    return { status: "ok", matches };
+  } catch {
+    return {
+      status: "unavailable",
+      message: "The documents can't be searched right now.",
+    };
+  }
+}
+
 export const copperTools = {
   get_products: tool({
     description:
@@ -200,5 +285,11 @@ export const copperTools = {
       "Checks today's stock for a Copper product, for every color or just one.",
     inputSchema: checkAvailabilityInput,
     execute: async (input) => checkAvailability(input),
+  }),
+  search_documents: tool({
+    description:
+      "Searches the Copper user guides, the Copper Plus FAQ and the Terms and Conditions, and returns the closest passages with their document title and page number.",
+    inputSchema: searchDocumentsInput,
+    execute: async (input) => searchDocuments(input),
   }),
 };

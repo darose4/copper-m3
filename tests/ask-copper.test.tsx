@@ -346,6 +346,68 @@ describe("Part A: the Ask Copper chat widget", () => {
     expect(chat.getByText("And for 3 years?")).toBeInTheDocument();
   });
 
+  it("shows a document search as a card with each document's title, page and passage", async () => {
+    vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "AIza-test-key");
+    const askCopper = vi.fn().mockResolvedValueOnce(
+      answered(
+        "Hold both buttons for 15 seconds (Copper Home User Guide, page 9).",
+        [
+          toolStep(
+            "search_documents",
+            { question: "How do I factory reset Copper Home?" },
+            {
+              status: "ok",
+              matches: [
+                {
+                  title: "Copper Home User Guide",
+                  page: 9,
+                  text: "A factory reset erases your settings.",
+                  url: "/docs/copper-home-user-guide.pdf#page=9",
+                  score: 0.81,
+                },
+                {
+                  title: "Copper Plus FAQ",
+                  page: 2,
+                  text: "Cancel anytime in the Copper app.",
+                  url: "/docs/copper-plus-faq.pdf#page=2",
+                  score: 0.52,
+                },
+              ],
+            },
+          ),
+        ],
+      ),
+    );
+    vi.doMock("@/lib/copper/assistant/ask", () => ({ askCopper }));
+    await renderPage();
+    const section = await openChat();
+    const chat = within(section);
+
+    await ask(chat, "How do I factory reset Copper Home?");
+    await waitFor(() =>
+      expect(chat.getByText(/hold both buttons/i)).toBeInTheDocument(),
+    );
+
+    const [card] = section.querySelectorAll<HTMLElement>(
+      '[data-testid="tool-call"]',
+    );
+    expect(card.dataset.tool).toBe("search_documents");
+    const inCard = within(card);
+    expect(inCard.getByText(/what copper sent/i)).toBeVisible();
+    expect(card.textContent).toContain("How do I factory reset Copper Home?");
+    expect(inCard.getByText(/what came back/i)).toBeVisible();
+    // Each match names its document, its page, and links to that page of the PDF.
+    expect(
+      inCard.getByRole("link", { name: "Copper Home User Guide" }),
+    ).toHaveAttribute("href", "/docs/copper-home-user-guide.pdf#page=9");
+    expect(inCard.getByText("Page 9")).toBeInTheDocument();
+    expect(
+      inCard.getByRole("link", { name: "Copper Plus FAQ" }),
+    ).toBeInTheDocument();
+    expect(inCard.getByText("Page 2")).toBeInTheDocument();
+    expect(inCard.getByText(/factory reset erases/i)).toBeInTheDocument();
+  });
+
   it("AC-M2.4 Each tool call shows as an open card before the reply: the tool, what Copper sent and what came back", async () => {
     vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "AIza-test-key");
     const askCopper = vi
@@ -567,6 +629,7 @@ describe("Part B: the pricing tools", () => {
         "check_availability",
         "get_prices",
         "get_products",
+        "search_documents",
       ]),
     );
     for (const [name, tool] of Object.entries(copperTools)) {
@@ -772,6 +835,7 @@ describe("Part C: askCopper", () => {
         "check_availability",
         "get_prices",
         "get_products",
+        "search_documents",
       ]),
     );
   });

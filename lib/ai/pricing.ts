@@ -7,6 +7,13 @@ export const PRICING: Record<ModelId, { input: number; output: number }> = {
   "google/gemini-3-flash": { input: 0.5, output: 3 },
 };
 
+// US dollars per million input tokens for the embedding model (list price).
+export const EMBEDDING_PRICE_PER_MILLION = 0.15;
+
+export function embeddingCostUsd(tokens: number): number {
+  return (tokens * EMBEDDING_PRICE_PER_MILLION) / 1_000_000;
+}
+
 export function costUsd(
   model: ModelId,
   inputTokens: number,
