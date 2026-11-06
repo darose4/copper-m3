@@ -632,7 +632,7 @@ function ToolOutput({ name, output }: { name: string; output: any }) {
       </div>
     );
   }
-  if (name === "search_documents" && output?.status) {
+  if (name === "search_docs" && output?.status) {
     if (output.status === "unavailable")
       return <p className="text-xs">{output.message}</p>;
     return (

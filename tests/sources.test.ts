@@ -18,7 +18,7 @@ const FAQ = "Copper Plus FAQ";
 const search = (...matches: ReturnType<typeof match>[]): Step => ({
   type: "tool",
   id: "call-1",
-  name: "search_documents",
+  name: "search_docs",
   state: "done",
   input: { question: "q" },
   output: { status: "ok", matches },
@@ -114,7 +114,7 @@ describe("citedSources", () => {
     const failed: Step = {
       type: "tool",
       id: "c",
-      name: "search_documents",
+      name: "search_docs",
       state: "done",
       output: { status: "unavailable", message: "no" },
     };

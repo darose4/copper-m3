@@ -17,7 +17,7 @@ type Rec = Record<string, unknown>;
 function searched(steps: Step[]): Source[] {
   const found: Source[] = [];
   for (const step of steps) {
-    if (step.type !== "tool" || step.name !== "search_documents") continue;
+    if (step.type !== "tool" || step.name !== "search_docs") continue;
     const output = step.output as Rec | undefined;
     if (output?.status !== "ok" || !Array.isArray(output.matches)) continue;
     for (const match of output.matches as Rec[]) {

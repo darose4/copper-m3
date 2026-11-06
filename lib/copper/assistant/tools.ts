@@ -201,9 +201,9 @@ export type DocumentSearch =
   | { status: "unavailable"; message: string };
 
 /** How many passages a search brings back. */
-const MATCHES_PER_SEARCH = 4;
+const MATCHES_PER_SEARCH = 5;
 
-export const searchDocumentsInput: z.ZodType<DocumentSearchInput> = z.object({
+export const searchDocsInput: z.ZodType<DocumentSearchInput> = z.object({
   question: z.string().trim().min(3).max(300),
 });
 
@@ -215,11 +215,11 @@ function similarity(a: number[], b: number[]): number {
 }
 
 /**
- * search_documents: finds the passages in the user guides, the Copper Plus FAQ
+ * search_docs: finds the passages in the user guides, the Copper Plus FAQ
  * and the Terms and Conditions that are closest in meaning to the question,
  * and says which document and page each one is on.
  */
-export async function searchDocuments({
+export async function searchDocs({
   question,
 }: DocumentSearchInput): Promise<DocumentSearch> {
   if (passages.length === 0) {
@@ -231,7 +231,7 @@ export async function searchDocuments({
   }
   try {
     const [embedding] = await callEmbed(
-      { module: 3, feature: "search-documents" },
+      { module: 3, feature: "search-docs" },
       [question],
       "query",
     );
@@ -286,10 +286,10 @@ export const copperTools = {
     inputSchema: checkAvailabilityInput,
     execute: async (input) => checkAvailability(input),
   }),
-  search_documents: tool({
+  search_docs: tool({
     description:
-      "Searches the Copper user guides, the Copper Plus FAQ and the Terms and Conditions, and returns the closest passages with their document title and page number.",
-    inputSchema: searchDocumentsInput,
-    execute: async (input) => searchDocuments(input),
+      "Searches the Copper user guides, the Copper Plus FAQ and the Terms and Conditions for a question about setup, troubleshooting, warranty or policy. Returns the 5 closest passages, each with its document title, page number and a link that opens the PDF at that page.",
+    inputSchema: searchDocsInput,
+    execute: async (input) => searchDocs(input),
   }),
 };

@@ -1,5 +1,5 @@
 // @vitest-environment node
-// search_documents: Ask Copper's tool for answering from the company's PDFs.
+// search_docs: Ask Copper's tool for answering from the company's PDFs.
 // It embeds the question, finds the closest passages and says which document
 // and page each one is on. The embedding call is faked here, so these tests
 // need no AI key and cost nothing.
@@ -54,9 +54,9 @@ async function load(options: {
   return { ...tools, callEmbed };
 }
 
-describe("search_documents", () => {
+describe("search_docs", () => {
   it("brings back the closest passages first, with their document title and page", async () => {
-    const { searchDocuments } = await load({
+    const { searchDocs } = await load({
       embedding: [1, 0],
       passages: [
         fake("far", 3, "Unrelated.", [0, 1]),
@@ -64,7 +64,7 @@ describe("search_documents", () => {
         fake("near", 4, "Press the button.", [0.8, 0.6]),
       ],
     });
-    const result = await searchDocuments({ question: "How do I reset it?" });
+    const result = await searchDocs({ question: "How do I reset it?" });
     expect(result.status).toBe("ok");
     if (result.status !== "ok") return;
     expect(result.matches.map((m) => [m.title, m.page])).toEqual([
@@ -76,11 +76,11 @@ describe("search_documents", () => {
   });
 
   it("shows the passage without the title it is stored with, and links to its page", async () => {
-    const { searchDocuments } = await load({
+    const { searchDocs } = await load({
       embedding: [1, 0],
       passages: [fake("a", 9, "Hold both buttons for 15 seconds.", [1, 0])],
     });
-    const result = await searchDocuments({ question: "reset the speaker" });
+    const result = await searchDocs({ question: "reset the speaker" });
     if (result.status !== "ok") throw new Error("expected ok");
     expect(result.matches[0].text).toBe("Hold both buttons for 15 seconds.");
     expect(result.matches[0].url).toBe(
@@ -88,38 +88,38 @@ describe("search_documents", () => {
     );
   });
 
-  it("brings back at most four passages", async () => {
+  it("brings back at most five passages", async () => {
     const many = Array.from({ length: 10 }, (_, i) =>
       fake(`p${i}`, i + 1, `Passage ${i}.`, [1, i / 10]),
     );
-    const { searchDocuments } = await load({
+    const { searchDocs } = await load({
       embedding: [1, 0],
       passages: many,
     });
-    const result = await searchDocuments({ question: "anything at all" });
+    const result = await searchDocs({ question: "anything at all" });
     if (result.status !== "ok") throw new Error("expected ok");
-    expect(result.matches).toHaveLength(4);
+    expect(result.matches).toHaveLength(5);
   });
 
   it("embeds the question as a query, logged under its own feature", async () => {
-    const { searchDocuments, callEmbed } = await load({
+    const { searchDocs, callEmbed } = await load({
       embedding: [1, 0],
       passages: [fake("a", 1, "Text.", [1, 0])],
     });
-    await searchDocuments({ question: "What is Copper Plus?" });
+    await searchDocs({ question: "What is Copper Plus?" });
     expect(callEmbed).toHaveBeenCalledWith(
-      { module: 3, feature: "search-documents" },
+      { module: 3, feature: "search-docs" },
       ["What is Copper Plus?"],
       "query",
     );
   });
 
   it("says the documents can't be searched when the embedding call fails", async () => {
-    const { searchDocuments } = await load({
+    const { searchDocs } = await load({
       embedding: new Error("Google is down"),
       passages: [fake("a", 1, "Text.", [1, 0])],
     });
-    const result = await searchDocuments({ question: "What is Copper Plus?" });
+    const result = await searchDocs({ question: "What is Copper Plus?" });
     expect(result).toEqual({
       status: "unavailable",
       message: "The documents can't be searched right now.",
@@ -127,20 +127,18 @@ describe("search_documents", () => {
   });
 
   it("says so, without calling Google, when no passages are loaded", async () => {
-    const { searchDocuments, callEmbed } = await load({ passages: [] });
-    const result = await searchDocuments({ question: "What is Copper Plus?" });
+    const { searchDocs, callEmbed } = await load({ passages: [] });
+    const result = await searchDocs({ question: "What is Copper Plus?" });
     expect(result.status).toBe("unavailable");
     expect(callEmbed).not.toHaveBeenCalled();
   });
 
   it("only accepts a real question", async () => {
-    const { searchDocumentsInput } = await load({});
-    expect(searchDocumentsInput.safeParse({ question: "reset" }).success).toBe(
-      true,
+    const { searchDocsInput } = await load({});
+    expect(searchDocsInput.safeParse({ question: "reset" }).success).toBe(true);
+    expect(searchDocsInput.parse({ question: "  reset it  " }).question).toBe(
+      "reset it",
     );
-    expect(
-      searchDocumentsInput.parse({ question: "  reset it  " }).question,
-    ).toBe("reset it");
     for (const bad of [
       {},
       { question: "" },
@@ -148,10 +146,9 @@ describe("search_documents", () => {
       { question: "x".repeat(301) },
       { question: 42 },
     ]) {
-      expect(
-        searchDocumentsInput.safeParse(bad).success,
-        JSON.stringify(bad),
-      ).toBe(false);
+      expect(searchDocsInput.safeParse(bad).success, JSON.stringify(bad)).toBe(
+        false,
+      );
     }
   });
 
@@ -162,8 +159,8 @@ describe("search_documents", () => {
     const target = passages.find(
       (p) => p.documentId === "copper-terms-and-conditions" && p.page === 4,
     )!;
-    const { searchDocuments } = await load({ embedding: target.embedding });
-    const result = await searchDocuments({
+    const { searchDocs } = await load({ embedding: target.embedding });
+    const result = await searchDocs({
       question: "Is Copper Plus refundable?",
     });
     if (result.status !== "ok") throw new Error("expected ok");
@@ -182,11 +179,11 @@ describe("search_documents", () => {
     const { COPPER_INSTRUCTIONS } =
       await import("@/lib/copper/assistant/instructions");
     const { TOOL_LABELS } = await import("@/lib/copper/assistant/progress");
-    expect(Object.keys(copperTools)).toContain("search_documents");
-    expect(copperTools.search_documents.description).toMatch(/passages/);
-    expect(typeof copperTools.search_documents.execute).toBe("function");
-    expect(TOOL_LABELS.search_documents).toBeTruthy();
-    expect(COPPER_INSTRUCTIONS).toContain("search_documents");
+    expect(Object.keys(copperTools)).toContain("search_docs");
+    expect(copperTools.search_docs.description).toMatch(/passages/);
+    expect(typeof copperTools.search_docs.execute).toBe("function");
+    expect(TOOL_LABELS.search_docs).toBeTruthy();
+    expect(COPPER_INSTRUCTIONS).toContain("search_docs");
     expect(COPPER_INSTRUCTIONS).toMatch(/page/i);
   });
 });

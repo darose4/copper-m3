@@ -11,8 +11,10 @@ import { EMBEDDING_MODEL } from "@/lib/ai/models";
 import { DOCUMENTS } from "@/lib/copper/documents";
 import {
   cleanPage,
+  MAX_PASSAGE_CHARS,
   normalize,
   passageText,
+  splitLong,
   splitPage,
   splitSentences,
 } from "@/lib/copper/passage-split";
@@ -69,6 +71,50 @@ describe("cutting a page into passages", () => {
     ]);
   });
 
+  it("leaves a passage under the size limit alone", () => {
+    expect(splitLong("A short passage.")).toEqual(["A short passage."]);
+    const justUnder = "word ".repeat(89).trim(); // 444 characters
+    expect(splitLong(justUnder)).toEqual([justUnder]);
+  });
+
+  it("cuts a long run of words into overlapping pieces, at word boundaries, losing nothing", () => {
+    // A flattened table: lots of words and no full stops.
+    const words = Array.from({ length: 300 }, (_, i) => `w${i}`);
+    const text = words.join(" ");
+    const pieces = splitLong(text);
+    expect(pieces.length).toBeGreaterThan(2);
+    for (const piece of pieces) {
+      expect(piece.length).toBeLessThanOrEqual(MAX_PASSAGE_CHARS);
+      expect(piece).toBe(piece.trim());
+      // Every piece is whole words from the text, never a word cut in half.
+      for (const word of piece.split(" ")) expect(words).toContain(word);
+    }
+    // Neighbouring pieces share some words, so a row cut in two is whole in one of them.
+    for (let i = 1; i < pieces.length; i++) {
+      const before = new Set(pieces[i - 1].split(" "));
+      expect(
+        pieces[i].split(" ").some((word) => before.has(word)),
+        `piece ${i} overlaps`,
+      ).toBe(true);
+    }
+    // Together the pieces still cover every word.
+    expect(new Set(pieces.flatMap((p) => p.split(" "))).size).toBe(
+      words.length,
+    );
+    expect(pieces[0].startsWith("w0 ")).toBe(true);
+    expect(pieces.at(-1)!.endsWith("w299")).toBe(true);
+  });
+
+  it("finds a table row in its own passage instead of lost in a long one", () => {
+    const filler = Array.from({ length: 60 }, (_, i) => `filler${i}`).join(" ");
+    const page = `${HEADER}Code What it means ${filler} C-63 Temperature protection: too hot to operate Move it to a cool place for 30 minutes ${filler}`;
+    const passages = splitPage(page);
+    const row = passages.find((p) => p.includes("C-63"))!;
+    expect(row).toContain("30 minutes");
+    expect(row.length).toBeLessThanOrEqual(MAX_PASSAGE_CHARS);
+    expect(passages.every((p) => p.length <= MAX_PASSAGE_CHARS)).toBe(true);
+  });
+
   it("makes no passages from a page with only a header", () => {
     expect(splitPage(HEADER)).toEqual([]);
   });
@@ -103,6 +149,10 @@ describe("the saved passages file (lib/copper/data/passages.json)", () => {
       expect(ids.has(p.id), `duplicate id ${p.id}`).toBe(false);
       ids.add(p.id);
       expect(p.text.startsWith(`${p.title}: `), p.id).toBe(true);
+      // Passages are short enough to be about one thing.
+      expect(p.text.length - p.title.length - 2, p.id).toBeLessThanOrEqual(
+        MAX_PASSAGE_CHARS,
+      );
       expect(Number.isInteger(p.page) && p.page >= 1, p.id).toBe(true);
       expect(p.embedding).toHaveLength(EMBEDDING_MODEL.dimensions);
       expect(Math.hypot(...p.embedding), p.id).toBeCloseTo(1, 3);

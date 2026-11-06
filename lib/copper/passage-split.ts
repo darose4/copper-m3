@@ -30,6 +30,8 @@ export function splitSentences(text: string): string[] {
 /**
  * One page's text as passages of a few sentences each. A lone sentence left
  * over at the end joins the passage before it, so no passage is a stray line.
+ * A passage that runs past MAX_PASSAGE_CHARS (a flattened table, say) is cut
+ * into smaller overlapping pieces.
  */
 export function splitPage(
   pageText: string,
@@ -43,7 +45,43 @@ export function splitPage(
   if (groups.length > 1 && groups.at(-1)!.length === 1) {
     groups[groups.length - 2].push(...groups.pop()!);
   }
-  return groups.map((group) => group.join(" "));
+  return groups.flatMap((group) => splitLong(group.join(" ")));
+}
+
+/** A passage longer than this gets cut into smaller overlapping pieces. */
+export const MAX_PASSAGE_CHARS = 450;
+
+/** How much of the end of one piece is repeated at the start of the next. */
+const OVERLAP_CHARS = 80;
+
+/**
+ * Cuts text longer than `max` characters into pieces that overlap a little,
+ * always at word boundaries. Tables come out of a PDF as one long run of words
+ * with no full stops, so a whole table can end up as a single "sentence". Left
+ * alone it would be one blurry passage about many things; in pieces, each row
+ * can be found on its own.
+ */
+export function splitLong(
+  text: string,
+  max = MAX_PASSAGE_CHARS,
+  overlap = OVERLAP_CHARS,
+): string[] {
+  if (text.length <= max) return [text];
+  const pieces: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + max, text.length);
+    if (end < text.length) {
+      const space = text.lastIndexOf(" ", end);
+      if (space > start + overlap) end = space;
+    }
+    pieces.push(text.slice(start, end).trim());
+    if (end >= text.length) break;
+    // The next piece starts a little before this one ended, at a word boundary.
+    const space = text.indexOf(" ", Math.max(end - overlap, start + 1));
+    start = space === -1 || space >= end ? end : space + 1;
+  }
+  return pieces;
 }
 
 /** The text that gets embedded and shown: it starts with the document title. */

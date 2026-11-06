@@ -353,7 +353,7 @@ describe("Part A: the Ask Copper chat widget", () => {
         "Hold both buttons for 15 seconds (Copper Home User Guide, page 9).",
         [
           toolStep(
-            "search_documents",
+            "search_docs",
             { question: "How do I factory reset Copper Home?" },
             {
               status: "ok",
@@ -391,7 +391,7 @@ describe("Part A: the Ask Copper chat widget", () => {
     const [card] = section.querySelectorAll<HTMLElement>(
       '[data-testid="tool-call"]',
     );
-    expect(card.dataset.tool).toBe("search_documents");
+    expect(card.dataset.tool).toBe("search_docs");
     const inCard = within(card);
     expect(inCard.getByText(/what copper sent/i)).toBeVisible();
     expect(card.textContent).toContain("How do I factory reset Copper Home?");
@@ -647,7 +647,7 @@ describe("Part B: the pricing tools", () => {
         "check_availability",
         "get_prices",
         "get_products",
-        "search_documents",
+        "search_docs",
       ]),
     );
     for (const [name, tool] of Object.entries(copperTools)) {
@@ -853,7 +853,7 @@ describe("Part C: askCopper", () => {
         "check_availability",
         "get_prices",
         "get_products",
-        "search_documents",
+        "search_docs",
       ]),
     );
   });

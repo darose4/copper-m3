@@ -19,6 +19,50 @@ const OUTPUT = path.join("lib", "copper", "data", "passages.json");
 /** Rounds to 6 decimals, which keeps the file small and changes nothing that matters. */
 const round = (x: number) => Math.round(x * 1e6) / 1e6;
 
+/**
+ * Google's free tier counts every passage as a request and allows about 100 a
+ * minute, so a big document set is embedded a few at a time, with a pause
+ * between batches and a wait-and-retry if Google says to slow down.
+ */
+const BATCH_SIZE = 40;
+const PAUSE_BETWEEN_BATCHES_MS = 30_000;
+const WAIT_AFTER_LIMIT_MS = 65_000;
+const TRIES_PER_BATCH = 4;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function embedInBatches(texts: string[]): Promise<number[][]> {
+  const all: number[][] = [];
+  for (let start = 0; start < texts.length; start += BATCH_SIZE) {
+    const batch = texts.slice(start, start + BATCH_SIZE);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        all.push(
+          ...(await callEmbed(
+            { module: 3, feature: "embed-passages" },
+            batch,
+            "document",
+          )),
+        );
+        break;
+      } catch (error) {
+        const limited = /quota|rate|429|limit/i.test(String(error));
+        if (!limited || attempt >= TRIES_PER_BATCH) throw error;
+        console.log(
+          `Google asked us to slow down; waiting ${WAIT_AFTER_LIMIT_MS / 1000}s (try ${attempt} of ${TRIES_PER_BATCH})...`,
+        );
+        await sleep(WAIT_AFTER_LIMIT_MS);
+      }
+    }
+    console.log(
+      `  embedded ${Math.min(start + BATCH_SIZE, texts.length)} of ${texts.length}`,
+    );
+    if (start + BATCH_SIZE < texts.length)
+      await sleep(PAUSE_BETWEEN_BATCHES_MS);
+  }
+  return all;
+}
+
 async function main() {
   const drafts: Omit<Passage, "embedding">[] = [];
   const counts: { title: string; pages: number; passages: number }[] = [];
@@ -48,11 +92,7 @@ async function main() {
   console.log(
     `Embedding ${drafts.length} passages with ${EMBEDDING_MODEL.id}...`,
   );
-  const embeddings = await callEmbed(
-    { module: 3, feature: "embed-passages" },
-    drafts.map((draft) => draft.text),
-    "document",
-  );
+  const embeddings = await embedInBatches(drafts.map((draft) => draft.text));
   if (embeddings.length !== drafts.length) {
     throw new Error(
       `Asked for ${drafts.length} embeddings but got ${embeddings.length}.`,

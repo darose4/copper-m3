@@ -19,8 +19,12 @@ type Case = {
   must: RegExp[];
   /** None of these may match the reply. */
   mustNot?: RegExp[];
-  /** A document page the reply should cite, e.g. "Copper Notes User Guide#8". */
-  cite?: string;
+  /**
+   * A document page the reply should cite, e.g. "Copper Notes User Guide#8".
+   * Give a list when more than one page really holds the answer: citing any
+   * one of them is enough.
+   */
+  cite?: string | string[];
   /** What the question is checking. */
   note: string;
 };
@@ -35,7 +39,11 @@ const CASES: Case[] = [
   {
     q: "How long is the warranty on Copper Home?",
     must: [/2[- ]year|two[- ]year/i],
-    cite: "Copper Home User Guide#10",
+    // The Home guide and the Terms table both state it.
+    cite: [
+      "Copper Home User Guide#10",
+      "Copper State Labs Terms and Conditions#3",
+    ],
     note: "warranty, product-specific",
   },
   {
@@ -69,7 +77,7 @@ const CASES: Case[] = [
   },
   {
     q: "Is it legal to record someone with Copper Notes without telling them?",
-    must: [/consent/i],
+    must: [/consent|agree to (be|being) recorded|everyone .{0,40}agree/i],
     mustNot: [/yes,? (it is|it's) legal/i, /it is legal to/i],
     note: "must not give legal advice",
   },
@@ -110,14 +118,38 @@ const CASES: Case[] = [
     mustNot: [/microphone array fault.*Copper Notes/i],
     note: "C-47 is a Copper Home code; Copper Notes doesn't list it",
   },
+  {
+    q: "C-47",
+    must: [/microphone/i],
+    cite: "Copper Home User Guide#9",
+    note: "a bare error code must be searched, not answered with 'what do you mean?'",
+  },
+  {
+    q: "annual refund",
+    must: [/14 days/i],
+    cite: "Copper Plus FAQ#5",
+    note: "two words, no question mark",
+  },
+  {
+    q: "reset Wi-Fi",
+    must: [/Change network/i],
+    cite: "Copper Home User Guide#4",
+    note: "short phrase covering both products",
+  },
 ];
 
 /** Seconds to wait before each question, to stay under Google's per-minute limits. */
 const PAUSE_MS = 4000;
 
 async function main() {
+  // `npm run eval -- warranty` runs only the questions that contain "warranty".
+  const only = process.argv[2]?.toLowerCase();
+  const cases = only
+    ? CASES.filter((c) => c.q.toLowerCase().includes(only))
+    : CASES;
+  if (cases.length === 0) throw new Error(`No question contains "${only}".`);
   let passed = 0;
-  for (const c of CASES) {
+  for (const c of cases) {
     await new Promise((resolve) => setTimeout(resolve, PAUSE_MS));
     const started = Date.now();
     const { progress } = await askCopper({
@@ -133,7 +165,9 @@ async function main() {
     const banned = (c.mustNot ?? [])
       .filter((r) => r.test(result.reply))
       .map(String);
-    const citeOk = !c.cite || sources.includes(c.cite);
+    const wanted = c.cite === undefined ? [] : [c.cite].flat();
+    const citeOk =
+      wanted.length === 0 || wanted.some((w) => sources.includes(w));
     const ok =
       missing.length === 0 &&
       banned.length === 0 &&
@@ -151,12 +185,12 @@ async function main() {
     );
     if (missing.length) console.log(`      missing: ${missing.join(" ")}`);
     if (banned.length) console.log(`      should not say: ${banned.join(" ")}`);
-    if (!citeOk) console.log(`      expected a source: ${c.cite}`);
+    if (!citeOk) console.log(`      expected a source: ${wanted.join(" or ")}`);
     if (result.status !== "done")
       console.log("      the answer did not finish (see the reply above)");
   }
-  console.log(`\n${passed} of ${CASES.length} passed`);
-  if (passed < CASES.length) process.exit(1);
+  console.log(`\n${passed} of ${cases.length} passed`);
+  if (passed < cases.length) process.exit(1);
 }
 
 main().catch((error) => {
