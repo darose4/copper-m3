@@ -2,7 +2,7 @@
 // and only ones the document search really found.
 import { describe, expect, it } from "vitest";
 import type { Step } from "@/lib/copper/assistant/progress";
-import { citedSources } from "@/lib/copper/assistant/sources";
+import { citedSources, linkCitations } from "@/lib/copper/assistant/sources";
 
 const match = (title: string, page: number, file: string) => ({
   title,
@@ -22,6 +22,29 @@ const search = (...matches: ReturnType<typeof match>[]): Step => ({
   state: "done",
   input: { question: "q" },
   output: { status: "ok", matches },
+});
+
+describe("linkCitations", () => {
+  const steps = [search(match(HOME, 9, "copper-home-user-guide"))];
+
+  it("links each [Title, p. N] citation to that PDF page", () => {
+    const parts = linkCitations(
+      `Hold both buttons. [${HOME}, p. 9] Then wait. [${HOME}, p. 9]`,
+      steps,
+    );
+    expect(parts.filter((p) => p.url)).toEqual([
+      { text: `[${HOME}, p. 9]`, url: "/docs/copper-home-user-guide.pdf#page=9" },
+      { text: `[${HOME}, p. 9]`, url: "/docs/copper-home-user-guide.pdf#page=9" },
+    ]);
+    expect(parts.map((p) => p.text).join("")).toBe(
+      `Hold both buttons. [${HOME}, p. 9] Then wait. [${HOME}, p. 9]`,
+    );
+  });
+
+  it("leaves a citation for a page that was never found as plain text", () => {
+    const parts = linkCitations(`Made up. [${HOME}, p. 40]`, steps);
+    expect(parts.some((p) => p.url)).toBe(false);
+  });
 });
 
 describe("citedSources", () => {

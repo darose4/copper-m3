@@ -29,7 +29,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { readLive } from "@/lib/ai/live";
 import { askCopper, type ChatMessage } from "@/lib/copper/assistant/ask";
-import { citedSources } from "@/lib/copper/assistant/sources";
+import { citedSources, linkCitations } from "@/lib/copper/assistant/sources";
 import {
   type Progress,
   type ToolStep,
@@ -428,7 +428,21 @@ function Answer({
             </div>
           )}
           <p className="text-sm whitespace-pre-wrap">
-            {reply}
+            {linkCitations(reply, steps).map((part, i) =>
+              part.url ? (
+                <a
+                  key={i}
+                  href={part.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  {part.text}
+                </a>
+              ) : (
+                part.text
+              ),
+            )}
             {working && (
               <span className="bg-primary ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle" />
             )}

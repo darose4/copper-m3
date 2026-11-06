@@ -49,6 +49,32 @@ function citedPages(reply: string, title: string): Set<number> {
   return pages;
 }
 
+export type ReplyPart = { text: string; url?: string };
+
+/**
+ * The reply cut into plain text and citations. A citation like
+ * [Copper Home User Guide, p. 9] gets the link that opens that PDF page, taken
+ * from what search_docs really returned (the model never writes URLs). A
+ * citation for a page that was not found stays plain text.
+ */
+export function linkCitations(reply: string, steps: Step[]): ReplyPart[] {
+  const urls = new Map<string, string>();
+  for (const s of searched(steps)) urls.set(`${s.title}#${s.page}`, s.url);
+  const parts: ReplyPart[] = [];
+  let last = 0;
+  for (const m of reply.matchAll(
+    /\[([^\[\]]+?),\s*(?:pages?|pp?\.)\s*(\d+)\s*\]/gi,
+  )) {
+    const url = urls.get(`${m[1].trim()}#${Number(m[2])}`);
+    if (!url) continue;
+    if (m.index > last) parts.push({ text: reply.slice(last, m.index) });
+    parts.push({ text: m[0], url });
+    last = m.index + m[0].length;
+  }
+  if (last < reply.length) parts.push({ text: reply.slice(last) });
+  return parts;
+}
+
 /** The document pages the reply cites that its searches really found, without repeats. */
 export function citedSources(reply: string, steps: Step[]): Source[] {
   const cited = new Map<string, Set<number>>();

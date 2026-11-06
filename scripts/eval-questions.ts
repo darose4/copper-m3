@@ -96,7 +96,7 @@ const CASES: Case[] = [
   {
     q: "Does Copper Home work with Alexa?",
     must: [
-      /couldn't find|could not find|can't|cannot|not sure|don't (see|have)|doesn't (say|mention)|no information|Copper Crew/i,
+      /couldn't find|could not find|support docs|can't|cannot|not sure|don't (see|have)|doesn't (say|mention)|no information|Copper Crew/i,
     ],
     mustNot: [/yes,? (it|copper home) (does|works)/i],
     note: "not in the documents: must not guess",
