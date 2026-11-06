@@ -119,6 +119,12 @@ const CASES: Case[] = [
     note: "C-47 is a Copper Home code; Copper Notes doesn't list it",
   },
   {
+    q: "Can Copper Home order me a pizza?",
+    must: [/couldn't find that in our support docs/i, /Copper Crew/i],
+    mustNot: [/\bpizza\b.*\[Copper/i],
+    note: "not in the documents: must say so, after searching",
+  },
+  {
     q: "C-47",
     must: [/microphone/i],
     cite: "Copper Home User Guide#9",
