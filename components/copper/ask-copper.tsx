@@ -49,6 +49,30 @@ type Chats = { tools: Turn[]; noTools: Turn[] };
 
 const WORKING: Progress = { steps: [], reply: "", status: "working" };
 
+/** If nothing new arrives for this long, Copper gives up on the answer. */
+const STALL_MS = 45_000;
+const STALLED = Symbol("stalled");
+
+/** Waits for `promise`, or for STALL_MS to pass, whichever comes first. */
+function orStall<T>(promise: Promise<T>): Promise<T | typeof STALLED> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stalled = new Promise<typeof STALLED>((resolve) => {
+    timer = setTimeout(() => resolve(STALLED), STALL_MS);
+  });
+  return Promise.race([promise, stalled]).finally(() => clearTimeout(timer));
+}
+
+/** What the shopper sees when an answer stops arriving: whatever came, plus a note. */
+function givenUp(last: Progress): Progress {
+  return {
+    ...last,
+    reply: last.reply
+      ? `${last.reply}\n\n(The rest of the answer didn't arrive. Please ask again.)`
+      : "Sorry, that's taking too long. Please try again.",
+    status: "error",
+  };
+}
+
 export function AskCopper({ aiConfigured }: { aiConfigured: boolean }) {
   const [open, setOpen] = useState(false);
   const [useTools, setUseTools] = useState(true);
@@ -87,10 +111,13 @@ export function AskCopper({ aiConfigured }: { aiConfigured: boolean }) {
     const chat = key;
     const index = turns.length;
     // Only finished turns go to the model: questions and Copper's replies.
+    // An answer that failed isn't sent back: Copper never said that apology.
     const messages: ChatMessage[] = [
       ...turns.flatMap(({ question, progress }): ChatMessage[] => [
         { role: "user", content: question },
-        { role: "assistant", content: progress.reply },
+        ...(progress.status === "done" && progress.reply
+          ? [{ role: "assistant" as const, content: progress.reply }]
+          : []),
       ]),
       { role: "user", content: question },
     ];
@@ -106,11 +133,24 @@ export function AskCopper({ aiConfigured }: { aiConfigured: boolean }) {
       [chat]: [...all[chat], { question, progress: WORKING }],
     }));
     try {
-      const { progress } = await askCopper({
-        messages,
-        useTools: chat === "tools",
-      });
-      for await (const update of readLive(progress)) setProgress(update);
+      const result = await orStall(
+        askCopper({ messages, useTools: chat === "tools" }),
+      );
+      if (result === STALLED) return setProgress(givenUp(WORKING));
+      const updates = readLive(result.progress);
+      let last = WORKING;
+      for (;;) {
+        // Each update has to arrive within STALL_MS of the one before it.
+        const next = await orStall(updates.next());
+        if (next === STALLED) {
+          setProgress(givenUp(last));
+          void updates.return(undefined);
+          return;
+        }
+        if (next.done) break;
+        last = next.value;
+        setProgress(last);
+      }
     } catch {
       setProgress({
         steps: [],

@@ -424,6 +424,80 @@ describe("Part A: the Ask Copper chat widget", () => {
     ).toBeTruthy();
   });
 
+  it("gives up on an answer that never arrives, so the chat never hangs, and lets the shopper ask again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "AIza-test-key");
+      // The server never sends a single update.
+      const never = createLive<Progress>();
+      const askCopper = vi
+        .fn()
+        .mockResolvedValueOnce({ progress: never.live })
+        .mockResolvedValueOnce(answered("Back again."));
+      vi.doMock("@/lib/copper/assistant/ask", () => ({ askCopper }));
+      await renderPage();
+      const chat = within(await openChat());
+
+      await ask(chat, "What is the warranty?");
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(
+        chat.queryByText(/taking too long/i),
+        "still waiting at 30s",
+      ).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      await waitFor(() =>
+        expect(chat.getByText(/taking too long/i)).toBeInTheDocument(),
+      );
+
+      // Free to ask again, and the apology isn't passed to the model as
+      // something Copper said.
+      await ask(chat, "And the return window?");
+      await waitFor(() =>
+        expect(chat.getByText("Back again.")).toBeInTheDocument(),
+      );
+      expect(askCopper.mock.calls[1][0].messages).toEqual([
+        { role: "user", content: "What is the warranty?" },
+        { role: "user", content: "And the return window?" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps what arrived when an answer stops partway, and says the rest didn't come", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "AIza-test-key");
+      const partway = createLive<Progress>();
+      partway.update({
+        steps: [],
+        reply: "Hold both buttons",
+        status: "working",
+      });
+      const askCopper = vi
+        .fn()
+        .mockResolvedValueOnce({ progress: partway.live });
+      vi.doMock("@/lib/copper/assistant/ask", () => ({ askCopper }));
+      await renderPage();
+      const chat = within(await openChat());
+
+      await ask(chat, "How do I reset it?");
+      await waitFor(() =>
+        expect(chat.getByText(/hold both buttons/i)).toBeInTheDocument(),
+      );
+      await vi.advanceTimersByTimeAsync(46_000);
+      await waitFor(() =>
+        expect(
+          chat.getByText(/rest of the answer didn't arrive/i),
+        ).toBeInTheDocument(),
+      );
+      expect(chat.getByText(/hold both buttons/i)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("AC-M2.4 Each tool call shows as an open card before the reply: the tool, what Copper sent and what came back", async () => {
     vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "AIza-test-key");
     const askCopper = vi
